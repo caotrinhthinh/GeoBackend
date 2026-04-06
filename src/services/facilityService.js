@@ -1,0 +1,81 @@
+const { sequelize, MedicalFacility } = require('../models');
+const { selectGeoJSON, makePoint } = require('../utils/geoHelpers');
+const AppError = require('../utils/AppError');
+
+const getAllFacilities = async () => {
+  return await MedicalFacility.findAll({
+    where: { is_active: true },
+    attributes: [
+      'id', 'name', 'type', 'address', 'phone',
+      selectGeoJSON('location_geom', 'location')
+    ]
+  });
+};
+
+const getNearbyFacilities = async (lat, lng, radius_m) => {
+  if (!lat || !lng) throw new AppError('Cần cung cấp lat và lng.', 400);
+  const radius = parseInt(radius_m) || 5000; // Mặc định 5km
+
+  const query = `
+    SELECT 
+      id, name, type, address, phone,
+      ST_AsGeoJSON(location_geom::geometry) as location,
+      ST_Distance(location_geom, ST_GeogFromText('POINT(:lng :lat)')) AS distance_meters
+    FROM medical_facility
+    WHERE is_active = true
+      AND ST_DWithin(location_geom, ST_GeogFromText('POINT(:lng :lat)'), :radius)
+    ORDER BY distance_meters ASC;
+  `;
+
+  const results = await sequelize.query(query, {
+    replacements: { lng, lat, radius },
+    type: sequelize.QueryTypes.SELECT
+  });
+
+  return results;
+};
+
+const createFacility = async (data) => {
+  const { name, type, address, phone, lat, lng } = data;
+  
+  if (!lat || !lng) throw new AppError('Cần cung cấp lat và lng', 400);
+
+  const facility = await MedicalFacility.create({
+    name, type, address, phone,
+    location_geom: makePoint(lat, lng)
+  });
+
+  return facility;
+};
+
+const updateFacility = async (id, data) => {
+  const facility = await MedicalFacility.findByPk(id);
+  if (!facility) throw new AppError('Cơ sở y tế không tồn tại', 404);
+
+  const { name, type, address, phone, lat, lng, is_active } = data;
+  
+  const updateData = { name, type, address, phone, is_active };
+  if (lat && lng) {
+    updateData.location_geom = makePoint(lat, lng);
+  }
+
+  await facility.update(updateData);
+  return facility;
+};
+
+const deleteFacility = async (id) => {
+  const facility = await MedicalFacility.findByPk(id);
+  if (!facility) throw new AppError('Cơ sở y tế không tồn tại', 404);
+
+  // Soft delete
+  await facility.update({ is_active: false });
+  return true;
+};
+
+module.exports = {
+  getAllFacilities,
+  getNearbyFacilities,
+  createFacility,
+  updateFacility,
+  deleteFacility
+};
