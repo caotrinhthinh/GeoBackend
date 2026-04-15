@@ -1,54 +1,113 @@
-jest.mock('../../../src/models', () => {
-  return {
-    sequelize: {
-      query: jest.fn(),
-      QueryTypes: { SELECT: 'SELECT' }
-    },
-    EmergencyRequest: {
-      create: jest.fn(),
-    }
-  };
+jest.mock("../../../src/models", () => {
+    return {
+        sequelize: {
+            query: jest.fn(),
+            QueryTypes: { SELECT: "SELECT" },
+        },
+        EmergencyRequest: {
+            create: jest.fn(),
+            findByPk: jest.fn(),
+        },
+    };
 });
 
-const { sequelize, EmergencyRequest } = require('../../../src/models');
-const emergencyService = require('../../../src/services/emergencyService');
-const AppError = require('../../../src/utils/AppError');
-const geoHelpers = require('../../../src/utils/geoHelpers');
-jest.mock('../../../src/utils/geoHelpers');
+const { sequelize, EmergencyRequest } = require("../../../src/models");
+const emergencyService = require("../../../src/services/emergencyService");
+const geoHelpers = require("../../../src/utils/geoHelpers");
+const osrmService = require("../../../src/services/osrmService");
 
-describe('Emergency Service (Logic Chọn Xe/Bệnh Viện)', () => {
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+jest.mock("../../../src/utils/geoHelpers");
+jest.mock("../../../src/services/osrmService", () => ({
+    getOptimalRoute: jest.fn(),
+}));
 
-  it('createSOS should throw an error if no hospital found', async () => {
-    sequelize.query.mockResolvedValue([]); // No hospitals returned
-
-    await expect(emergencyService.createSOS(1, 10.7, 106.6, 'Help')).rejects.toThrow(
-      'Không tìm thấy bệnh viện nào'
-    );
-  });
-
-  it('createSOS should assign nearest hospital if found', async () => {
-    const mockHospitals = [{ id: 5, distance_meters: 1000 }];
-    sequelize.query.mockResolvedValue(mockHospitals);
-    
-    EmergencyRequest.create.mockResolvedValue({
-      id: 99,
-      assigned_facility_id: 5,
-      status: 'pending'
+describe("Emergency Service (Logic Chọn Xe/Bệnh Viện)", () => {
+    afterEach(() => {
+        jest.clearAllMocks();
     });
 
-    geoHelpers.makePoint.mockReturnValue('MOCK_POINT');
+    it("createSOS should throw an error if no hospital found", async () => {
+        sequelize.query.mockResolvedValue([]); // No hospitals returned
 
-    const result = await emergencyService.createSOS(2, 10.7, 106.6, 'Emergency!');
-    
-    expect(sequelize.query).toHaveBeenCalledTimes(1);
-    expect(EmergencyRequest.create).toHaveBeenCalledWith(expect.objectContaining({
-      requester_id: 2,
-      assigned_facility_id: 5,
-      status: 'pending'
-    }));
-    expect(result.assigned_facility_id).toBe(5);
-  });
+        await expect(emergencyService.createSOS(1, 10.7, 106.6, "Help")).rejects.toThrow(
+            "Không tìm thấy bệnh viện nào",
+        );
+    });
+
+    it("createSOS should assign nearest hospital if found", async () => {
+        const mockHospitals = [{ id: 5, distance_meters: 1000 }];
+        sequelize.query.mockResolvedValue(mockHospitals);
+
+        EmergencyRequest.create.mockResolvedValue({
+            id: 99,
+            assigned_facility_id: 5,
+            status: "pending",
+        });
+
+        geoHelpers.makePoint.mockReturnValue("MOCK_POINT");
+
+        const result = await emergencyService.createSOS(2, 10.7, 106.6, "Emergency!");
+
+        expect(sequelize.query).toHaveBeenCalledTimes(1);
+        expect(EmergencyRequest.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                requester_id: 2,
+                assigned_facility_id: 5,
+                status: "pending",
+            }),
+        );
+        expect(result.assigned_facility_id).toBe(5);
+    });
+
+    it("getEmergencyRoute should deny role 2 from another facility", async () => {
+        EmergencyRequest.findByPk.mockResolvedValue({
+            id: 10,
+            requester_id: 11,
+            assigned_facility_id: 5,
+            assigned_ambulance_id: 2,
+            status: "assigned",
+        });
+
+        await expect(emergencyService.getEmergencyRoute(10, 11, 1, 2)).rejects.toThrow("not allowed");
+    });
+
+    it("getEmergencyRoute should return OSRM LineString for requester", async () => {
+        EmergencyRequest.findByPk.mockResolvedValue({
+            id: 25,
+            requester_id: 9,
+            assigned_facility_id: 3,
+            assigned_ambulance_id: 7,
+            status: "assigned",
+        });
+
+        sequelize.query.mockResolvedValue([
+            {
+                ambulance_lat: 10.776,
+                ambulance_lng: 106.7,
+                patient_lat: 10.78,
+                patient_lng: 106.71,
+            },
+        ]);
+
+        osrmService.getOptimalRoute.mockResolvedValue({
+            line_string: {
+                type: "LineString",
+                coordinates: [
+                    [106.7, 10.776],
+                    [106.71, 10.78],
+                ],
+            },
+            distance_meters: 1200,
+            duration_seconds: 300,
+        });
+
+        const result = await emergencyService.getEmergencyRoute(25, 9, null, 3);
+
+        expect(osrmService.getOptimalRoute).toHaveBeenCalledWith(
+            { lat: 10.776, lng: 106.7 },
+            { lat: 10.78, lng: 106.71 },
+        );
+        expect(result.route.line_string.type).toBe("LineString");
+        expect(result.emergency_id).toBe(25);
+    });
 });

@@ -1,7 +1,7 @@
-const express = require('express');
-const trackingController = require('../controllers/trackingController');
-const verifyJWT = require('../middleware/verifyJWT');
-const checkRole = require('../middleware/checkRole');
+const express = require("express");
+const trackingController = require("../controllers/trackingController");
+const verifyJWT = require("../middleware/verifyJWT");
+const checkRole = require("../middleware/checkRole");
 
 const router = express.Router();
 
@@ -38,7 +38,74 @@ router.use(verifyJWT, checkRole(1, 2));
  *       201:
  *         description: Thành công
  */
-router.post('/', trackingController.recordGPS);
+router.post("/", trackingController.recordGPS);
+
+/**
+ * @swagger
+ * /api/tracking/simulator/start:
+ *   post:
+ *     summary: Start an ambulance GPS simulator (3-5 seconds interval)
+ *     tags: [Tracking]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [emergency_request_id]
+ *             properties:
+ *               emergency_request_id: { type: integer }
+ *               interval_seconds: { type: number, minimum: 3, maximum: 5 }
+ *     responses:
+ *       201:
+ *         description: Simulation started
+ */
+router.post("/simulator/start", trackingController.startSimulation);
+
+/**
+ * @swagger
+ * /api/tracking/simulator/stop:
+ *   post:
+ *     summary: Stop an active GPS simulator
+ *     tags: [Tracking]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [simulation_id]
+ *             properties:
+ *               simulation_id: { type: string }
+ *     responses:
+ *       200:
+ *         description: Simulation stopped
+ */
+router.post("/simulator/stop", trackingController.stopSimulation);
+
+/**
+ * @swagger
+ * /api/tracking/simulator/{simulationId}:
+ *   get:
+ *     summary: Get simulator status
+ *     tags: [Tracking]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: simulationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Simulation status
+ */
+router.get("/simulator/:simulationId", trackingController.getSimulationStatus);
 
 /**
  * @swagger
@@ -63,6 +130,6 @@ router.post('/', trackingController.recordGPS);
  *       200:
  *         description: Trả về mảng Lịch sử di chuyển (LIFO)
  */
-router.get('/:ambulanceId/history', trackingController.getHistory);
+router.get("/:ambulanceId/history", trackingController.getHistory);
 
 module.exports = router;

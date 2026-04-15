@@ -1,8 +1,8 @@
-const express = require('express');
-const emergencyController = require('../controllers/emergencyController');
-const verifyJWT = require('../middleware/verifyJWT');
-const checkRole = require('../middleware/checkRole');
-const { sosLimiter } = require('../middleware/rateLimiter');
+const express = require("express");
+const emergencyController = require("../controllers/emergencyController");
+const verifyJWT = require("../middleware/verifyJWT");
+const checkRole = require("../middleware/checkRole");
+const { sosLimiter } = require("../middleware/rateLimiter");
 
 const router = express.Router();
 
@@ -46,8 +46,8 @@ router.use(verifyJWT);
  *       200:
  *         description: Danh sách
  */
-router.post('/', sosLimiter, emergencyController.createSOS);
-router.get('/', checkRole(1, 2), emergencyController.getRequests);
+router.post("/", sosLimiter, emergencyController.createSOS);
+router.get("/", checkRole(1, 2), emergencyController.getRequests);
 
 /**
  * @swagger
@@ -75,7 +75,7 @@ router.get('/', checkRole(1, 2), emergencyController.getRequests);
  *       200:
  *         description: Thành công
  */
-router.patch('/:id/assign', checkRole(1, 2), emergencyController.assignAmbulance);
+router.patch("/:id/assign", checkRole(1, 2), emergencyController.assignAmbulance);
 
 /**
  * @swagger
@@ -103,6 +103,26 @@ router.patch('/:id/assign', checkRole(1, 2), emergencyController.assignAmbulance
  *       200:
  *         description: Thành công
  */
-router.patch('/:id/status', checkRole(1, 2), emergencyController.updateStatus);
+router.patch("/:id/status", checkRole(1, 2), emergencyController.updateStatus);
+
+/**
+ * @swagger
+ * /api/emergency/{id}/route:
+ *   get:
+ *     summary: Get optimal ambulance route as LineString from OSRM
+ *     tags: [Emergency]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Route data for map rendering
+ */
+router.get("/:id/route", emergencyController.getRoute);
 
 module.exports = router;
