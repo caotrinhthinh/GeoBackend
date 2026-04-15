@@ -22,7 +22,7 @@ describe('Auth Integration Tests', () => {
     });
 
     it('POST /api/auth/login should return 400 for missing fields', async () => {
-        const res = await request(app).post('/api/auth/login').send({ email: 'admin@geobackend.local' }); // Missing password only
+        const res = await request(app).post('/api/auth/login').send({ email: 'admin@geobackend.com' }); // Missing password only
 
         expect(res.statusCode).toEqual(400);
         expect(res.body.status).toEqual('error');
@@ -30,14 +30,14 @@ describe('Auth Integration Tests', () => {
     });
 
     it('POST /api/auth/login should return token on success', async () => {
-        login.mockResolvedValue({ user: { email: 'admin@geobackend.local' }, token: 'mockToken' });
+        login.mockResolvedValue({ user: { email: 'admin@geobackend.com' }, token: 'mockToken' });
 
         const res = await request(app)
             .post('/api/auth/login')
-            .send({ email: 'admin@geobackend.local', password: 'password123' });
+            .send({ email: 'admin@geobackend.com', password: 'password123' });
 
         expect(res.statusCode).toEqual(200);
         expect(res.body.data.token).toEqual('mockToken');
-        expect(res.body.data.user.email).toEqual('admin@geobackend.local');
+        expect(res.body.data.user.email).toEqual('admin@geobackend.com');
     });
 });

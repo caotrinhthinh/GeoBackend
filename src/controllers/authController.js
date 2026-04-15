@@ -6,9 +6,7 @@ const Joi = require('joi');
 const login = catchAsync(async (req, res, next) => {
     // 1. Validate Input
     const schema = Joi.object({
-        email: Joi.string()
-            .email({ tlds: { allow: false } })
-            .required(),
+        email: Joi.string().email().required(),
         password: Joi.string().required(),
     });
 
