@@ -28,7 +28,7 @@ router.use(verifyJWT, checkRole(1, 2));
  *         name: facility_id
  *         schema:
  *           type: integer
- *         description: Trực ban chỉ thấy của bệnh viện mình (Id tự lấy từ JWT), SuperAdmin có thể chọn facility_id
+ *         description: SuperAdmin có thể truyền facility_id để lọc; nếu không truyền thì trả về tất cả xe. Admin trực ban luôn lấy theo facility_id trong JWT.
  *     responses:
  *       200:
  *         description: Danh sách xe
@@ -50,9 +50,7 @@ router.use(verifyJWT, checkRole(1, 2));
  *       201:
  *         description: Thành công
  */
-router.route('/')
-  .get(ambulanceController.getAmbulances)
-  .post(ambulanceController.createAmbulance);
+router.route('/').get(ambulanceController.getAmbulances).post(ambulanceController.createAmbulance);
 
 /**
  * @swagger
