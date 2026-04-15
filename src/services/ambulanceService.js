@@ -1,6 +1,7 @@
 const { Ambulance, MedicalFacility } = require('../models');
 const { selectGeoJSON, makePoint } = require('../utils/geoHelpers');
 const AppError = require('../utils/AppError');
+const { parseCoordinatePair } = require('../utils/coordinateUtils');
 
 const buildAmbulanceQuery = (where = {}) => ({
     where,
@@ -53,7 +54,7 @@ const updateStatus = async (id, status, facility_id, role_id) => {
 };
 
 const updateLocation = async (id, lat, lng, facility_id, role_id) => {
-    if (!lat || !lng) throw new AppError('Cần cung cấp lat và lng', 400);
+    const { latNum, lngNum } = parseCoordinatePair(lat, lng, 'Cần cung cấp lat và lng');
 
     const ambulance = await Ambulance.findByPk(id);
     if (!ambulance) throw new AppError('Không tìm thấy xe cứu thương', 404);
@@ -62,7 +63,7 @@ const updateLocation = async (id, lat, lng, facility_id, role_id) => {
         throw new AppError('Bạn không có quyền cập nhật xe của bệnh viện khác', 403);
     }
 
-    ambulance.current_location = makePoint(lat, lng);
+    ambulance.current_location = makePoint(latNum, lngNum);
     await ambulance.save();
     return ambulance;
 };
