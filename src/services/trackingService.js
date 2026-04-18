@@ -2,6 +2,7 @@ const { AmbulanceTracking, Ambulance, EmergencyRequest } = require('../models');
 const { makePoint, selectGeoJSON } = require('../utils/geoHelpers');
 const AppError = require('../utils/AppError');
 const { parseCoordinatePair } = require('../utils/coordinateUtils');
+const { emitTrackingUpdate } = require('../config/socket');
 
 const recordGPS = async (ambulance_id, lat, lng, emergency_request_id, facility_id, role_id) => {
     const { latNum, lngNum } = parseCoordinatePair(lat, lng, 'Cần cung cấp lat và lng');
@@ -23,6 +24,18 @@ const recordGPS = async (ambulance_id, lat, lng, emergency_request_id, facility_
         emergency_request_id: emergency_request_id || null,
         location: makePoint(latNum, lngNum),
         recorded_at: new Date(),
+    });
+
+    emitTrackingUpdate({
+        ambulance_id: Number(ambulance_id),
+        emergency_request_id: emergency_request_id || null,
+        latitude: latNum,
+        longitude: lngNum,
+        recorded_at: trackingRecord.recorded_at,
+        location: {
+            type: 'Point',
+            coordinates: [lngNum, latNum],
+        },
     });
 
     return trackingRecord;
