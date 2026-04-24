@@ -14,31 +14,36 @@ const recordGPS = async (ambulance_id, lat, lng, emergency_request_id, facility_
         throw new AppError('Bạn không có quyền log GPS cho xe của bệnh viện khác', 403);
     }
 
-    // Update current location in ambulance table
-    ambulance.current_location = makePoint(latNum, lngNum);
-    await ambulance.save();
+    // Use a transaction so location update, tracking log and optional emergency status update are atomic
+    const t = await Ambulance.sequelize.transaction();
+    try {
+        // Update current location in ambulance table
+        ambulance.current_location = makePoint(latNum, lngNum);
+        await ambulance.save({ transaction: t });
 
-    // Create log entry in tracking table
-    const trackingRecord = await AmbulanceTracking.create({
-        ambulance_id,
-        emergency_request_id: emergency_request_id || null,
-        location: makePoint(latNum, lngNum),
-        recorded_at: new Date(),
-    });
+        // If this tracking message is tied to an emergency, and that emergency is currently 'assigned', mark it 'in_progress'
+        if (emergency_request_id) {
+            const emergency = await EmergencyRequest.findByPk(emergency_request_id, { transaction: t });
+            if (emergency && emergency.status === 'assigned') {
+                emergency.status = 'in_progress';
+                await emergency.save({ transaction: t });
+            }
+        }
 
-    emitTrackingUpdate({
-        ambulance_id: Number(ambulance_id),
-        emergency_request_id: emergency_request_id || null,
-        latitude: latNum,
-        longitude: lngNum,
-        recorded_at: trackingRecord.recorded_at,
-        location: {
-            type: 'Point',
-            coordinates: [lngNum, latNum],
-        },
-    });
+        // Create log entry in tracking table
+        const trackingRecord = await AmbulanceTracking.create({
+            ambulance_id,
+            emergency_request_id: emergency_request_id || null,
+            location: makePoint(latNum, lngNum),
+            recorded_at: new Date(),
+        }, { transaction: t });
 
-    return trackingRecord;
+        await t.commit();
+        return trackingRecord;
+    } catch (error) {
+        await t.rollback();
+        throw error;
+    }
 };
 
 const getHistory = async (ambulance_id, facility_id, role_id, limit = 50) => {
