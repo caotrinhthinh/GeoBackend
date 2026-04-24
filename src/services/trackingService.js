@@ -39,6 +39,18 @@ const recordGPS = async (ambulance_id, lat, lng, emergency_request_id, facility_
         }, { transaction: t });
 
         await t.commit();
+
+        // TC05: Broadcast vị trí xe vào đúng room của ca cấp cứu
+        if (emergency_request_id) {
+            emitTrackingUpdate({
+                ambulance_id,
+                emergency_request_id,
+                lat: latNum,
+                lng: lngNum,
+                timestamp: trackingRecord.recorded_at,
+            });
+        }
+
         return trackingRecord;
     } catch (error) {
         await t.rollback();
