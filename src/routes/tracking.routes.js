@@ -42,6 +42,28 @@ router.post('/', trackingController.recordGPS);
 
 /**
  * @swagger
+ * /api/tracking/simulate/start:
+ *   post:
+ *     summary: Bắt đầu giả lập GPS cho xe cứu thương mỗi 3 giây
+ *     tags: [Tracking]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post('/simulate/start', trackingController.startSimulation);
+
+/**
+ * @swagger
+ * /api/tracking/simulate/stop:
+ *   post:
+ *     summary: Dừng giả lập GPS cho xe cứu thương
+ *     tags: [Tracking]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post('/simulate/stop', trackingController.stopSimulation);
+
+/**
+ * @swagger
  * /api/tracking/{ambulanceId}/history:
  *   get:
  *     summary: Lấy chuỗi vết GPS của xe

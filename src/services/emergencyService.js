@@ -2,6 +2,7 @@ const { sequelize, EmergencyRequest, MedicalFacility, Ambulance } = require('../
 const { makePoint, selectGeoJSON } = require('../utils/geoHelpers');
 const AppError = require('../utils/AppError');
 const { parseCoordinatePair } = require('../utils/coordinateUtils');
+const { getRouteLineString, toPointObject } = require('./routeService');
 
 const createSOS = async (requester_id, lat, lng, notes) => {
     const { latNum, lngNum } = parseCoordinatePair(lat, lng, 'Cần cung cấp tòa độ vị trí bệnh nhân');
@@ -9,6 +10,7 @@ const createSOS = async (requester_id, lat, lng, notes) => {
     // Tìm bệnh viện gần nhất (type = 'hospital')
     const query = `
     SELECT id, ST_Distance(location_geom, ST_GeogFromText('POINT(:lng :lat)')) AS distance_meters
+            , ST_AsGeoJSON(location_geom::geometry) AS location
     FROM medical_facility
     WHERE is_active = true AND type = 'hospital'
     ORDER BY distance_meters ASC
@@ -16,7 +18,7 @@ const createSOS = async (requester_id, lat, lng, notes) => {
   `;
 
     const nearestHospitals = await sequelize.query(query, {
-        replacements: { lng, lat },
+        replacements: { lng: lngNum, lat: latNum },
         type: sequelize.QueryTypes.SELECT,
     });
 
@@ -25,6 +27,9 @@ const createSOS = async (requester_id, lat, lng, notes) => {
     }
 
     const assignedFacility = nearestHospitals[0];
+    const hospitalPoint = toPointObject(assignedFacility.location);
+    const patientPoint = { lat: latNum, lng: lngNum };
+    const route = await getRouteLineString(hospitalPoint, patientPoint);
 
     // Tạo record SOS
     const sos = await EmergencyRequest.create({
@@ -36,7 +41,10 @@ const createSOS = async (requester_id, lat, lng, notes) => {
         notes: notes || '',
     });
 
-    return sos;
+    return {
+        ...sos.toJSON(),
+        route,
+    };
 };
 
 const getRequests = async (facility_id, role_id) => {

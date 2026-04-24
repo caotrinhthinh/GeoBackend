@@ -1,4 +1,5 @@
 const trackingService = require('../services/trackingService');
+const trackingSimulationService = require('../services/trackingSimulationService');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const Joi = require('joi');
@@ -45,7 +46,41 @@ const getHistory = catchAsync(async (req, res, next) => {
   res.status(200).json({ status: 'success', results: data.length, data });
 });
 
+const startSimulation = catchAsync(async (req, res, next) => {
+  const schema = Joi.object({
+    ambulance_id: Joi.number().required(),
+    emergency_request_id: Joi.number().required(),
+    interval_ms: Joi.number().min(1000).optional(),
+  });
+
+  const { error, value } = schema.validate(req.body);
+  if (error) return next(new AppError(error.details[0].message, 400));
+
+  const result = await trackingSimulationService.startSimulation(
+    value.ambulance_id,
+    value.emergency_request_id,
+    { intervalMs: value.interval_ms },
+  );
+
+  res.status(200).json({ status: 'success', data: result });
+});
+
+const stopSimulation = catchAsync(async (req, res, next) => {
+  const schema = Joi.object({
+    ambulance_id: Joi.number().required(),
+  });
+
+  const { error, value } = schema.validate(req.body);
+  if (error) return next(new AppError(error.details[0].message, 400));
+
+  const result = await trackingSimulationService.stopSimulation(value.ambulance_id);
+
+  res.status(200).json({ status: 'success', data: result });
+});
+
 module.exports = {
   recordGPS,
-  getHistory
+  getHistory,
+  startSimulation,
+  stopSimulation,
 };
