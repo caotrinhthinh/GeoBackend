@@ -43,6 +43,14 @@ const EmergencyRequest = sequelize.define('EmergencyRequest', {
   distance_meters: {
     type: DataTypes.FLOAT,
   },
+  route_geometry: {
+    type: DataTypes.JSONB,    // GeoJSON LineString từ OSRM
+    allowNull: true,
+  },
+  eta_seconds: {
+    type: DataTypes.INTEGER,  // ETA tính bằng giây (null nếu OSRM fallback)
+    allowNull: true,
+  },
   notes: {
     type: DataTypes.TEXT,
   },

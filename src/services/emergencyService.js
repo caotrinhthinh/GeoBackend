@@ -32,20 +32,19 @@ const createSOS = async (requester_id, lat, lng, notes) => {
     const patientPoint = { lat: latNum, lng: lngNum };
     const route = await getRouteLineString(hospitalPoint, patientPoint);
 
-    // Tạo record SOS
+    // Tạo record SOS — TC04: lưu route_geometry và eta_seconds từ OSRM
     const sos = await EmergencyRequest.create({
         requester_id,
         patient_location: makePoint(latNum, lngNum),
         assigned_facility_id: assignedFacility.id,
         status: 'pending',
-        distance_meters: assignedFacility.distance_meters,
+        distance_meters: route.distance_meters,
+        route_geometry: route.lineString,
+        eta_seconds: route.duration_seconds != null ? Math.round(route.duration_seconds) : null,
         notes: notes || '',
     });
 
-    return {
-        ...sos.toJSON(),
-        route,
-    };
+    return sos;
 };
 
 const getRequests = async (facility_id, role_id) => {
