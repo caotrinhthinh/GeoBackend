@@ -1,3 +1,4 @@
+const jwt = require('jsonwebtoken');
 let ioInstance = null;
 
 const createFallbackSocket = () => ({
@@ -37,11 +38,26 @@ const initializeRealtimeServer = (httpServer) => {
         }
       });
 
-      // TC05: Client join room để theo dõi một ca cấp cứu cụ thể
-      socket.on('join_request_room', ({ requestId } = {}) => {
-        if (!requestId) return;
-        socket.join(`request:${requestId}`);
-        socket.emit('room_joined', { room: `request:${requestId}` });
+      // TC05: Client join room để theo dõi một ca cấp cứu cụ thể (Yêu cầu JWT hoặc Tracking Token)
+      socket.on('join_request_room', ({ requestId, token } = {}) => {
+        if (!requestId || !token) {
+          return socket.emit('error', 'Missing tracking token');
+        }
+
+        try {
+          // Verify token (Tracking Token sinh ra từ createSOS hoặc JWT của User)
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          
+          // Nếu dùng tracking token của guest, phải khớp request_id
+          if (decoded.role === 'guest_tracker' && decoded.request_id !== parseInt(requestId, 10)) {
+            return socket.emit('error', 'Invalid token for this request');
+          }
+
+          socket.join(`request:${requestId}`);
+          socket.emit('room_joined', { room: `request:${requestId}` });
+        } catch (error) {
+          socket.emit('error', 'Token expired or invalid');
+        }
       });
 
       socket.on('leave_request_room', ({ requestId } = {}) => {
@@ -73,8 +89,21 @@ const emitTrackingUpdate = (payload) => {
   }
 };
 
+const closeEmergencyRoom = (requestId) => {
+  if (!ioInstance) return;
+  const roomName = `request:${requestId}`;
+  
+  // Thông báo cho các client biết ca cấp cứu đã kết thúc
+  ioInstance.to(roomName).emit('tracking_ended', { message: 'Ca cấp cứu đã hoàn tất' });
+  
+  // Ép tất cả sockets rời khỏi room
+  ioInstance.in(roomName).socketsJoin('limbo');
+  ioInstance.socketsLeave(roomName);
+};
+
 module.exports = {
   initializeRealtimeServer,
   getRealtimeServer,
   emitTrackingUpdate,
+  closeEmergencyRoom,
 };

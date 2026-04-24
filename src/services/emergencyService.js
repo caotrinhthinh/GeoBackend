@@ -3,6 +3,7 @@ const { makePoint, selectGeoJSON } = require('../utils/geoHelpers');
 const AppError = require('../utils/AppError');
 const { parseCoordinatePair } = require('../utils/coordinateUtils');
 const { getRouteLineString, toPointObject } = require('./routeService');
+const { closeEmergencyRoom } = require('../config/socket');
 
 const createSOS = async (requester_id, lat, lng, notes) => {
     const { latNum, lngNum } = parseCoordinatePair(lat, lng, 'Cần cung cấp tòa độ vị trí bệnh nhân');
@@ -136,6 +137,12 @@ const updateStatus = async (emergency_id, status, facility_id, role_id) => {
         }
 
         await t.commit();
+
+        // Auto cleanup Websocket room if request is finished
+        if (status === 'completed' || status === 'cancelled') {
+            closeEmergencyRoom(emergency_id);
+        }
+
         return emergency;
     } catch (error) {
         await t.rollback();

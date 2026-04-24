@@ -6,8 +6,6 @@ const { sosLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
-router.use(verifyJWT);
-
 /**
  * @swagger
  * tags:
@@ -47,7 +45,7 @@ router.use(verifyJWT);
  *         description: Danh sách
  */
 router.post('/', sosLimiter, emergencyController.createSOS);
-router.get('/', checkRole(1, 2), emergencyController.getRequests);
+router.get('/', verifyJWT, checkRole(1, 2), emergencyController.getRequests);
 
 /**
  * @swagger
@@ -75,7 +73,7 @@ router.get('/', checkRole(1, 2), emergencyController.getRequests);
  *       200:
  *         description: Thành công
  */
-router.patch('/:id/assign', checkRole(1, 2), emergencyController.assignAmbulance);
+router.patch('/:id/assign', verifyJWT, checkRole(1, 2), emergencyController.assignAmbulance);
 
 /**
  * @swagger
@@ -103,6 +101,6 @@ router.patch('/:id/assign', checkRole(1, 2), emergencyController.assignAmbulance
  *       200:
  *         description: Thành công
  */
-router.patch('/:id/status', checkRole(1, 2), emergencyController.updateStatus);
+router.patch('/:id/status', verifyJWT, checkRole(1, 2), emergencyController.updateStatus);
 
 module.exports = router;
