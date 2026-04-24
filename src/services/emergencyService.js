@@ -9,7 +9,8 @@ const createSOS = async (requester_id, lat, lng, notes) => {
 
     // Tìm bệnh viện gần nhất (type = 'hospital')
     const query = `
-    SELECT id, ST_Distance(location_geom, ST_GeogFromText('POINT(:lng :lat)')) AS distance_meters
+    SELECT id,
+           ST_Distance(location_geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography) AS distance_meters
             , ST_AsGeoJSON(location_geom::geometry) AS location
     FROM medical_facility
     WHERE is_active = true AND type = 'hospital'

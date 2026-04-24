@@ -18,10 +18,10 @@ const getNearbyFacilities = async (lat, lng, radius_m) => {
     SELECT 
       id, name, type, address, phone,
       ST_AsGeoJSON(location_geom::geometry) as location,
-      ST_Distance(location_geom, ST_GeogFromText('POINT(:lng :lat)')) AS distance_meters
+      ST_Distance(location_geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography) AS distance_meters
     FROM medical_facility
     WHERE is_active = true
-      AND ST_DWithin(location_geom, ST_GeogFromText('POINT(:lng :lat)'), :radius)
+      AND ST_DWithin(location_geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, :radius)
     ORDER BY distance_meters ASC;
   `;
 
