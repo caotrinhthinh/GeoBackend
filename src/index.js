@@ -1,13 +1,18 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
+const { initializeRealtimeServer } = require('./config/socket');
 const { apiLimiter } = require('./middleware/rateLimiter');
 const requestLogger = require('./middleware/requestLogger');
 const { sequelize } = require('./models');
 const routes = require('./routes');
 
 const app = express();
+const server = http.createServer(app);
+
+initializeRealtimeServer(server);
 
 // Middlewares
 app.use(express.json());
@@ -36,7 +41,7 @@ const PORT = process.env.PORT || 3000;
 sequelize.authenticate()
   .then(() => {
     console.log('✅ PostgreSQL connected via Sequelize.');
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📚 Swagger docs available at http://localhost:${PORT}/api/docs`);
     });
