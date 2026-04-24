@@ -1,4 +1,4 @@
-const { sequelize, MedicalFacility } = require('../models');
+const { sequelize, MedicalFacility, EmergencyRequest } = require('../models');
 const { selectGeoJSON, makePoint } = require('../utils/geoHelpers');
 const AppError = require('../utils/AppError');
 const { parseCoordinatePair } = require('../utils/coordinateUtils');
@@ -67,6 +67,17 @@ const updateFacility = async (id, data) => {
 const deleteFacility = async (id) => {
     const facility = await MedicalFacility.findByPk(id);
     if (!facility) throw new AppError('Cơ sở y tế không tồn tại', 404);
+
+    // TC02: Chặn xóa nếu cơ sở đang xử lý ca SOS
+    const activeRequest = await EmergencyRequest.findOne({
+        where: {
+            assigned_facility_id: id,
+            status: ['pending', 'assigned', 'in_progress'],
+        },
+    });
+    if (activeRequest) {
+        throw new AppError('Không thể xóa cơ sở đang xử lý ca cấp cứu', 400);
+    }
 
     // Soft delete
     await facility.update({ is_active: false });
