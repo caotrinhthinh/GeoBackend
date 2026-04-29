@@ -2,6 +2,7 @@ const emergencyService = require('../services/emergencyService');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const Joi = require('joi');
+const jwt = require('jsonwebtoken');
 
 const createSOS = catchAsync(async (req, res, next) => {
   const schema = Joi.object({
@@ -13,8 +14,17 @@ const createSOS = catchAsync(async (req, res, next) => {
   const { error, value } = schema.validate(req.body);
   if (error) return next(new AppError(error.details[0].message, 400));
 
-  const sos = await emergencyService.createSOS(req.user.id, value.lat, value.lng, value.notes);
-  res.status(201).json({ status: 'success', data: sos });
+  const requester_id = req.user ? req.user.id : null;
+  const sos = await emergencyService.createSOS(requester_id, value.lat, value.lng, value.notes);
+  
+  // Tạo tracking token cho guest (hết hạn sau 1 giờ)
+  const tracking_token = jwt.sign(
+    { request_id: sos.id, role: 'guest_tracker' },
+    process.env.JWT_SECRET,
+    { expiresIn: '1h' }
+  );
+
+  res.status(201).json({ status: 'success', data: sos, tracking_token });
 });
 
 const getRequests = catchAsync(async (req, res, next) => {

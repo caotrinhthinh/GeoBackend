@@ -3,13 +3,15 @@ const { makePoint, selectGeoJSON } = require('../utils/geoHelpers');
 const AppError = require('../utils/AppError');
 const { parseCoordinatePair } = require('../utils/coordinateUtils');
 const { getRouteLineString, toPointObject } = require('./routeService');
+const { closeEmergencyRoom } = require('../config/socket');
 
 const createSOS = async (requester_id, lat, lng, notes) => {
     const { latNum, lngNum } = parseCoordinatePair(lat, lng, 'Cần cung cấp tòa độ vị trí bệnh nhân');
 
     // Tìm bệnh viện gần nhất (type = 'hospital')
     const query = `
-    SELECT id, ST_Distance(location_geom, ST_GeogFromText('POINT(:lng :lat)')) AS distance_meters
+    SELECT id,
+           ST_Distance(location_geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography) AS distance_meters
             , ST_AsGeoJSON(location_geom::geometry) AS location
     FROM medical_facility
     WHERE is_active = true AND type = 'hospital'
@@ -31,20 +33,19 @@ const createSOS = async (requester_id, lat, lng, notes) => {
     const patientPoint = { lat: latNum, lng: lngNum };
     const route = await getRouteLineString(hospitalPoint, patientPoint);
 
-    // Tạo record SOS
+    // Tạo record SOS — TC04: lưu route_geometry và eta_seconds từ OSRM
     const sos = await EmergencyRequest.create({
         requester_id,
         patient_location: makePoint(latNum, lngNum),
         assigned_facility_id: assignedFacility.id,
         status: 'pending',
-        distance_meters: assignedFacility.distance_meters,
+        distance_meters: route.distance_meters,
+        route_geometry: route.lineString,
+        eta_seconds: route.duration_seconds != null ? Math.round(route.duration_seconds) : null,
         notes: notes || '',
     });
 
-    return {
-        ...sos.toJSON(),
-        route,
-    };
+    return sos;
 };
 
 const getRequests = async (facility_id, role_id) => {
@@ -136,6 +137,12 @@ const updateStatus = async (emergency_id, status, facility_id, role_id) => {
         }
 
         await t.commit();
+
+        // Auto cleanup Websocket room if request is finished
+        if (status === 'completed' || status === 'cancelled') {
+            closeEmergencyRoom(emergency_id);
+        }
+
         return emergency;
     } catch (error) {
         await t.rollback();
