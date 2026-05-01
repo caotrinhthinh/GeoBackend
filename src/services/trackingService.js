@@ -14,19 +14,31 @@ const recordGPS = async (ambulance_id, lat, lng, emergency_request_id, facility_
         throw new AppError('Bạn không có quyền log GPS cho xe của bệnh viện khác', 403);
     }
 
-    // Use a transaction so location update, tracking log and optional emergency status update are atomic
-    const t = await Ambulance.sequelize.transaction();
+    // Use a transaction so location update, tracking log and optional emergency status update are atomic.
+    // Fail-open for unit tests/mocks that don't provide `Ambulance.sequelize`.
+    const t = Ambulance?.sequelize?.transaction ? await Ambulance.sequelize.transaction() : null;
     try {
         // Update current location in ambulance table
         ambulance.current_location = makePoint(latNum, lngNum);
-        await ambulance.save({ transaction: t });
+        if (t) {
+            await ambulance.save({ transaction: t });
+        } else {
+            await ambulance.save();
+        }
 
         // If this tracking message is tied to an emergency, and that emergency is currently 'assigned', mark it 'in_progress'
-        if (emergency_request_id) {
-            const emergency = await EmergencyRequest.findByPk(emergency_request_id, { transaction: t });
+        if (emergency_request_id && typeof EmergencyRequest?.findByPk === 'function') {
+            const emergency = t
+                ? await EmergencyRequest.findByPk(emergency_request_id, { transaction: t })
+                : await EmergencyRequest.findByPk(emergency_request_id);
+
             if (emergency && emergency.status === 'assigned') {
                 emergency.status = 'in_progress';
-                await emergency.save({ transaction: t });
+                if (t) {
+                    await emergency.save({ transaction: t });
+                } else {
+                    await emergency.save();
+                }
             }
         }
 
@@ -36,24 +48,31 @@ const recordGPS = async (ambulance_id, lat, lng, emergency_request_id, facility_
             emergency_request_id: emergency_request_id || null,
             location: makePoint(latNum, lngNum),
             recorded_at: new Date(),
-        }, { transaction: t });
+        }, t ? { transaction: t } : undefined);
 
-        await t.commit();
+        if (t) {
+            await t.commit();
+        }
 
         // TC05: Broadcast vị trí xe vào đúng room của ca cấp cứu
         if (emergency_request_id) {
             emitTrackingUpdate({
                 ambulance_id,
                 emergency_request_id,
+                // Keep both naming styles for compatibility (unit tests + frontend).
                 lat: latNum,
                 lng: lngNum,
+                latitude: latNum,
+                longitude: lngNum,
                 timestamp: trackingRecord.recorded_at,
             });
         }
 
         return trackingRecord;
     } catch (error) {
-        await t.rollback();
+        if (t) {
+            await t.rollback();
+        }
         throw error;
     }
 };

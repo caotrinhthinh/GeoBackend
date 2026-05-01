@@ -1,5 +1,6 @@
 const express = require('express');
 const authController = require('../controllers/authController');
+const verifyJWT = require('../middleware/verifyJWT');
 
 const router = express.Router();
 
@@ -28,5 +29,9 @@ const router = express.Router();
  *         description: Sai email hoặc mật khẩu
  */
 router.post('/login', authController.login);
+router.post('/register', authController.register);
+router.post('/google', authController.googleLogin);
+router.post('/refresh-token', authController.refreshToken);
+router.post('/link-guest-account', verifyJWT, authController.linkGuestAccount);
 
 module.exports = router;

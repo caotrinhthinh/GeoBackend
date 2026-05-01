@@ -6,7 +6,7 @@ const { parseCoordinatePair } = require('../utils/coordinateUtils');
 const getAllFacilities = async () => {
     return await MedicalFacility.findAll({
         where: { is_active: true },
-        attributes: ['id', 'name', 'type', 'address', 'phone', selectGeoJSON('location_geom', 'location')],
+        attributes: ['id', 'name', 'type', 'address', 'phone', 'is_active', selectGeoJSON('location_geom', 'location')],
     });
 };
 

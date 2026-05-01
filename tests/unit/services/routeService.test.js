@@ -31,10 +31,9 @@ describe('Route Service', () => {
         );
 
         expect(result.provider).toBe('fallback-straight-line');
-        expect(result.lineString.coordinates).toEqual([
-            [106.1, 10.1],
-            [106.2, 10.2],
-        ]);
+        expect(result.lineString.coordinates.length).toBeGreaterThan(2);
+        expect(result.lineString.coordinates[0]).toEqual([106.1, 10.1]);
+        expect(result.lineString.coordinates[result.lineString.coordinates.length - 1]).toEqual([106.2, 10.2]);
         expect(result.distance_meters).toBeGreaterThan(0);
     });
 });

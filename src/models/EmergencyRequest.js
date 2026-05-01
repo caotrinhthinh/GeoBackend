@@ -51,8 +51,36 @@ const EmergencyRequest = sequelize.define('EmergencyRequest', {
     type: DataTypes.INTEGER,  // ETA tính bằng giây (null nếu OSRM fallback)
     allowNull: true,
   },
+  done_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
   notes: {
     type: DataTypes.TEXT,
+  },
+  requester_name: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+  },
+  requester_blood_type: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  requester_allergies: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  requester_chronic_conditions: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  requester_age: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  requester_emergency_contact_phone: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
   },
 }, {
   tableName: 'emergency_request',

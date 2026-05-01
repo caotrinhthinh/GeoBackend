@@ -1,6 +1,7 @@
 const express = require('express');
 const emergencyController = require('../controllers/emergencyController');
 const verifyJWT = require('../middleware/verifyJWT');
+const optionalJWT = require('../middleware/optionalJWT');
 const checkRole = require('../middleware/checkRole');
 const { sosLimiter } = require('../middleware/rateLimiter');
 
@@ -44,7 +45,11 @@ const router = express.Router();
  *       200:
  *         description: Danh sách
  */
-router.post('/', sosLimiter, emergencyController.createSOS);
+// Frontend contract expects POST /api/emergency/sos
+router.post('/sos', optionalJWT, sosLimiter, emergencyController.createSOS);
+// Backward-compatible route (if some clients still call POST /api/emergency)
+router.post('/', optionalJWT, sosLimiter, emergencyController.createSOS);
+router.get('/active', optionalJWT, emergencyController.getActiveSOS);
 router.get('/', verifyJWT, checkRole(1, 2), emergencyController.getRequests);
 
 /**
@@ -73,7 +78,8 @@ router.get('/', verifyJWT, checkRole(1, 2), emergencyController.getRequests);
  *       200:
  *         description: Thành công
  */
-router.patch('/:id/assign', verifyJWT, checkRole(1, 2), emergencyController.assignAmbulance);
+router.patch('/:id/assign', verifyJWT, checkRole(2), emergencyController.assignAmbulance);
+router.post('/dispatch', verifyJWT, checkRole(2), emergencyController.dispatchAmbulance);
 
 /**
  * @swagger
@@ -101,6 +107,6 @@ router.patch('/:id/assign', verifyJWT, checkRole(1, 2), emergencyController.assi
  *       200:
  *         description: Thành công
  */
-router.patch('/:id/status', verifyJWT, checkRole(1, 2), emergencyController.updateStatus);
+router.patch('/:id/status', verifyJWT, checkRole(2), emergencyController.updateStatus);
 
 module.exports = router;

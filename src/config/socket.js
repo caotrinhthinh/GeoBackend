@@ -101,9 +101,20 @@ const closeEmergencyRoom = (requestId) => {
   ioInstance.socketsLeave(roomName);
 };
 
+// TC09: emit alert for Admin dashboard immediately when SOS is created.
+const emitSosAlert = (payload) => {
+  if (!ioInstance || typeof ioInstance.to !== 'function') {
+    return;
+  }
+
+  // AdminTrucBan is role_id=2, and it joins `role:2`
+  ioInstance.to("role:2").emit("sos_alert", payload);
+};
+
 module.exports = {
   initializeRealtimeServer,
   getRealtimeServer,
   emitTrackingUpdate,
   closeEmergencyRoom,
+  emitSosAlert,
 };

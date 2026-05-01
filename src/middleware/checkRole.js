@@ -7,7 +7,8 @@ const checkRole = (...roles) => {
     }
     
     if (!roles.includes(req.user.role_id)) {
-      return next(new AppError('Bạn không có quyền truy cập chức năng này.', 403));
+      // Keep message stable for test assertions (TC08)
+      return next(new AppError('Bạn không có quyền truy cập chức năng này', 403));
     }
     
     next();
