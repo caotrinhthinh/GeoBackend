@@ -43,7 +43,8 @@ describe('Emergency Service (Logic Chọn Xe/Bệnh Viện)', () => {
 
         const result = await emergencyService.createSOS(2, 10.7, 106.6, 'Emergency!');
 
-        expect(sequelize.query).toHaveBeenCalledTimes(1);
+        // createSOS now runs 2 queries: supported-area check + nearest-hospital lookup
+        expect(sequelize.query).toHaveBeenCalledTimes(2);
         expect(EmergencyRequest.create).toHaveBeenCalledWith(
             expect.objectContaining({
                 requester_id: 2,

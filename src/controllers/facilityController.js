@@ -3,13 +3,71 @@ const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const Joi = require('joi');
 
+function normalizeVietnamese(input) {
+  return String(input ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function inferFacilityTypeFromName(name) {
+  const normalized = normalizeVietnamese(name);
+
+  // Heuristic: use Vietnamese keywords to infer type even if DB has mismatched fields.
+  if (normalized.includes("benh vien") || normalized.includes("bv ")) {
+    return 1; // Hospital
+  }
+
+  if (normalized.includes("phong kham")) {
+    return 2; // Clinic
+  }
+
+  if (normalized.includes("nha thuoc")) {
+    return 3; // Pharmacy
+  }
+
+  return undefined;
+}
+
+function mapFacilityTypeFromDbType(dbType) {
+  if (dbType === "hospital") return 1;
+  if (dbType === "clinic") return 2;
+  if (dbType === "pharmacy") return 3;
+  return undefined;
+}
+
+function ensureFacilityType(row) {
+  const inferred = inferFacilityTypeFromName(row?.name);
+  if (inferred) return inferred;
+
+  return mapFacilityTypeFromDbType(row?.type);
+}
+
+function tryParseLocation(rawLocation) {
+  if (rawLocation == null) {
+    return null;
+  }
+
+  if (typeof rawLocation !== "string") {
+    return rawLocation;
+  }
+
+  try {
+    return JSON.parse(rawLocation);
+  } catch {
+    return null;
+  }
+}
+
 const getAllFacilities = catchAsync(async (req, res, next) => {
   const result = await facilityService.getAllFacilities();
-  // Decode parsed GeoJSON strings if they were strings (Postgres driver sometimes returns JSON strings when ST_AsGeoJSON is used)
+  // Decode GeoJSON safely so malformed rows do not break the entire admin list.
   const data = result.map(f => {
-    let loc = f.get('location');
-    if (typeof loc === 'string') loc = JSON.parse(loc);
-    return { ...f.dataValues, location: loc };
+    const loc = tryParseLocation(f.get('location'));
+
+    const row = { ...f.dataValues, location: loc };
+    row.facility_type = ensureFacilityType(row) ?? row.facility_type;
+    return row;
   });
   
   res.status(200).json({ status: 'success', results: data.length, data });
@@ -20,10 +78,14 @@ const getNearbyFacilities = catchAsync(async (req, res, next) => {
   const results = await facilityService.getNearbyFacilities(lat, lng, radius);
   
   // parse geojson strings
-  const data = results.map(f => ({
-    ...f,
-    location: typeof f.location === 'string' ? JSON.parse(f.location) : f.location
-  }));
+  const data = results.map(f => {
+    const row = {
+      ...f,
+      location: tryParseLocation(f.location)
+    };
+    row.facility_type = ensureFacilityType(row) ?? row.facility_type;
+    return row;
+  });
 
   res.status(200).json({ status: 'success', results: data.length, data });
 });

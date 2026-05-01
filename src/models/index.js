@@ -2,6 +2,7 @@ const sequelize = require('../config/database');
 
 const MedicalFacility = require('./MedicalFacility');
 const User = require('./User');
+const UserProfile = require('./UserProfile');
 const Ambulance = require('./Ambulance');
 const EmergencyRequest = require('./EmergencyRequest');
 const AmbulanceTracking = require('./AmbulanceTracking');
@@ -9,6 +10,8 @@ const AmbulanceTracking = require('./AmbulanceTracking');
 // MedicalFacility relations
 MedicalFacility.hasMany(User, { foreignKey: 'facility_id' });
 User.belongsTo(MedicalFacility, { foreignKey: 'facility_id' });
+User.hasOne(UserProfile, { foreignKey: 'user_id', as: 'profile' });
+UserProfile.belongsTo(User, { foreignKey: 'user_id' });
 
 MedicalFacility.hasMany(Ambulance, { foreignKey: 'facility_id' });
 Ambulance.belongsTo(MedicalFacility, { foreignKey: 'facility_id' });
@@ -34,6 +37,7 @@ module.exports = {
   sequelize,
   MedicalFacility,
   User,
+  UserProfile,
   Ambulance,
   EmergencyRequest,
   AmbulanceTracking,

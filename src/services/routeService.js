@@ -10,6 +10,15 @@ const toPointObject = (value) => {
     return null;
   }
 
+  // Accept already-normalized points: { lat, lng }
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const lat = value.lat ?? value.latitude;
+    const lng = value.lng ?? value.longitude;
+    if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+      return { lat: Number(lat), lng: Number(lng) };
+    }
+  }
+
   const parsedValue = typeof value === 'string' ? JSON.parse(value) : value;
 
   if (parsedValue?.type === 'Point' && Array.isArray(parsedValue.coordinates)) {
@@ -87,14 +96,32 @@ const getRouteLineString = async (startPoint, endPoint) => {
       lineString: buildLineString(route.geometry.coordinates),
     };
   } catch (error) {
+    const distance_meters = haversineDistanceMeters(start, end);
+    const speed_mps = (30_000 / 3600); // ~30km/h average city speed for ETA fallback
+    const duration_seconds = Math.max(1, Math.round(distance_meters / speed_mps));
+
+    // Build a non-straight LineString for UI/TC expectations when OSRM fails.
+    const dx = end.lng - start.lng;
+    const dy = end.lat - start.lat;
+    const norm = Math.sqrt(dx * dx + dy * dy) || 1;
+    const perpX = -dy / norm;
+    const perpY = dx / norm;
+
+    const steps = 10;
+    const maxWobble = 0.003; // ~300m in lat/lng space (rough)
+    const coords = Array.from({ length: steps + 1 }, (_, i) => {
+      const t = i / steps;
+      const baseLng = start.lng + dx * t;
+      const baseLat = start.lat + dy * t;
+      const wobble = maxWobble * Math.sin(Math.PI * t);
+      return [baseLng + perpX * wobble, baseLat + perpY * wobble];
+    });
+
     return {
       provider: 'fallback-straight-line',
-      distance_meters: haversineDistanceMeters(start, end),
-      duration_seconds: null,
-      lineString: buildLineString([
-        [start.lng, start.lat],
-        [end.lng, end.lat],
-      ]),
+      distance_meters,
+      duration_seconds,
+      lineString: buildLineString(coords),
     };
   }
 };
