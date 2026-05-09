@@ -9,7 +9,10 @@
     "test": "jest",
     "db:migrate": "sequelize-cli db:migrate",
     "db:seed": "sequelize-cli db:seed:all",
-    "db:reset": "sequelize-cli db:migrate:undo:all && sequelize-cli db:migrate && sequelize-cli db:seed:all"
+    "db:reset": "sequelize-cli db:migrate:undo:all && sequelize-cli db:migrate && sequelize-cli db:seed:all",
+    "db:init": "node scripts/init-db.js",
+    "infra:up": "docker compose up -d postgres redis && npm run db:init",
+    "infra:down": "docker compose down"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
