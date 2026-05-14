@@ -73,6 +73,7 @@ const login = async (email, password) => {
       id: user.id,
       email: user.email,
       role_id: user.role_id,
+      facility_id: user.facility_id ?? null,
       role:
         user.role_id === 1 ? 'SUPER_ADMIN'
         : user.role_id === 2 ? 'ADMIN'
@@ -102,6 +103,7 @@ async function buildAuthResult(user) {
       id: user.id,
       email: user.email,
       role_id: user.role_id,
+      facility_id: user.facility_id ?? null,
       role:
         user.role_id === 1 ? 'SUPER_ADMIN'
           : user.role_id === 2 ? 'ADMIN'
@@ -259,6 +261,7 @@ const refreshAccessToken = async (refreshToken) => {
       id: currentUser.id,
       email: currentUser.email,
       role_id: currentUser.role_id,
+      facility_id: currentUser.facility_id ?? null,
       role:
         currentUser.role_id === 1 ? 'SUPER_ADMIN'
         : currentUser.role_id === 2 ? 'ADMIN'

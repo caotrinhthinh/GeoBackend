@@ -56,6 +56,12 @@ router.use(verifyJWT);
  */
 router.get('/nearby', facilityController.getNearbyFacilities);
 
+/**
+ * Danh sách đầy đủ cho SuperAdmin (gồm cơ sở tạm ngưng / soft-delete).
+ * Phải khai báo trước router `/:id` để không bị nuốt bởi param.
+ */
+router.get('/admin-overview', checkRole(1), facilityController.getAllFacilitiesForAdmin);
+
 router.use(checkRole(1));
 
 /**

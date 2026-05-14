@@ -1,8 +1,31 @@
 jest.mock('../../../src/models', () => {
+    const describeTable = jest.fn(async (tableName) => {
+        if (tableName === 'user_profiles') {
+            throw new Error('no user_profiles in unit mock');
+        }
+        // emergency_request: đủ cột để getEmergencyRequestColumns + returningAttributes hoạt động
+        return {
+            id: {},
+            requester_id: {},
+            patient_location: {},
+            assigned_facility_id: {},
+            assigned_ambulance_id: {},
+            status: {},
+            distance_meters: {},
+            route_geometry: {},
+            eta_seconds: {},
+            done_at: {},
+            notes: {},
+            created_at: {},
+            updated_at: {},
+        };
+    });
+
     return {
         sequelize: {
             query: jest.fn(),
             QueryTypes: { SELECT: 'SELECT' },
+            getQueryInterface: jest.fn(() => ({ describeTable })),
         },
         EmergencyRequest: {
             create: jest.fn(),
@@ -51,6 +74,7 @@ describe('Emergency Service (Logic Chọn Xe/Bệnh Viện)', () => {
                 assigned_facility_id: 5,
                 status: 'pending',
             }),
+            expect.objectContaining({ returning: expect.any(Array) }),
         );
         expect(result.assigned_facility_id).toBe(5);
     });
@@ -71,6 +95,7 @@ describe('Emergency Service (Logic Chọn Xe/Bệnh Viện)', () => {
                 assigned_facility_id: 7,
                 status: 'pending',
             }),
+            expect.objectContaining({ returning: expect.any(Array) }),
         );
     });
 });
