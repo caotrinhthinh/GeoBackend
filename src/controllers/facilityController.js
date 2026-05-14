@@ -59,18 +59,25 @@ function tryParseLocation(rawLocation) {
   }
 }
 
-const getAllFacilities = catchAsync(async (req, res, next) => {
-  const result = await facilityService.getAllFacilities();
-  // Decode GeoJSON safely so malformed rows do not break the entire admin list.
-  const data = result.map(f => {
-    const loc = tryParseLocation(f.get('location'));
-
+function mapFacilityRows(result) {
+  return result.map((f) => {
+    const loc = tryParseLocation(f.get("location"));
     const row = { ...f.dataValues, location: loc };
     row.facility_type = ensureFacilityType(row) ?? row.facility_type;
     return row;
   });
-  
-  res.status(200).json({ status: 'success', results: data.length, data });
+}
+
+const getAllFacilities = catchAsync(async (req, res, next) => {
+  const result = await facilityService.getAllFacilities();
+  const data = mapFacilityRows(result);
+  res.status(200).json({ status: "success", results: data.length, data });
+});
+
+const getAllFacilitiesForAdmin = catchAsync(async (req, res, next) => {
+  const result = await facilityService.getAllFacilitiesForAdmin();
+  const data = mapFacilityRows(result);
+  res.status(200).json({ status: "success", results: data.length, data });
 });
 
 const getNearbyFacilities = catchAsync(async (req, res, next) => {
@@ -119,8 +126,9 @@ const deleteFacility = catchAsync(async (req, res, next) => {
 
 module.exports = {
   getAllFacilities,
+  getAllFacilitiesForAdmin,
   getNearbyFacilities,
   createFacility,
   updateFacility,
-  deleteFacility
+  deleteFacility,
 };

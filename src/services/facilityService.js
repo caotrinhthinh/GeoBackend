@@ -10,6 +10,14 @@ const getAllFacilities = async () => {
     });
 };
 
+/** SuperAdmin: tất cả cơ sở kể cả đã soft-delete (is_active = false) để dashboard phân tách tổng / hoạt động. */
+const getAllFacilitiesForAdmin = async () => {
+    return await MedicalFacility.findAll({
+        attributes: ['id', 'name', 'type', 'address', 'phone', 'is_active', selectGeoJSON('location_geom', 'location')],
+        order: [['id', 'ASC']],
+    });
+};
+
 const getNearbyFacilities = async (lat, lng, radius_m) => {
     const { latNum, lngNum } = parseCoordinatePair(lat, lng, 'Cần cung cấp lat và lng.');
     const radius = parseInt(radius_m) || 5000; // Mặc định 5km
@@ -86,6 +94,7 @@ const deleteFacility = async (id) => {
 
 module.exports = {
     getAllFacilities,
+    getAllFacilitiesForAdmin,
     getNearbyFacilities,
     createFacility,
     updateFacility,

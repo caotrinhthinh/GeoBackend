@@ -44,4 +44,8 @@ router.route('/')
   .post(userController.createUser)
   .get(userController.getUsers);
 
+router.post('/:id/reset-password', userController.resetHospitalAdminPassword);
+router.patch('/:id', userController.updateHospitalAdmin);
+router.delete('/:id', userController.deactivateUser);
+
 module.exports = router;
