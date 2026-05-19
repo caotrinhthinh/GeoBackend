@@ -80,7 +80,7 @@ router.use(checkRole(1));
  *             type: object
  *             properties:
  *               name: { type: string }
- *               type: { type: string, enum: [hospital, pharmacy] }
+ *               type: { type: string, enum: [hospital, pharmacy, clinic] }
  *               lat: { type: number }
  *               lng: { type: number }
  *     responses:

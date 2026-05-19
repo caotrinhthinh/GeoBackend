@@ -12,7 +12,7 @@ const MedicalFacility = sequelize.define('MedicalFacility', {
     allowNull: false,
   },
   type: {
-    type: DataTypes.ENUM('hospital', 'pharmacy'),
+    type: DataTypes.ENUM('hospital', 'pharmacy', 'clinic'),
     allowNull: false,
   },
   address: {
