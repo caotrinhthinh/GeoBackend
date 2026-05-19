@@ -100,7 +100,7 @@ const getNearbyFacilities = catchAsync(async (req, res, next) => {
 const createFacility = catchAsync(async (req, res, next) => {
   const schema = Joi.object({
     name: Joi.string().required(),
-    type: Joi.string().valid('hospital', 'pharmacy').required(),
+    type: Joi.string().valid('hospital', 'pharmacy', 'clinic').required(),
     address: Joi.string().optional(),
     phone: Joi.string().optional(),
     lat: Joi.number().required(),
