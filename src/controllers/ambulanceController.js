@@ -2,6 +2,7 @@ const ambulanceService = require('../services/ambulanceService');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const Joi = require('joi');
+const { normalizePlateNumber } = require('../utils/plateNumber');
 
 const getAmbulances = catchAsync(async (req, res, next) => {
     // Role 2 luôn chỉ xem xe của bệnh viện mình.
@@ -47,8 +48,11 @@ const getAmbulances = catchAsync(async (req, res, next) => {
 
 const createAmbulance = catchAsync(async (req, res, next) => {
     const schema = Joi.object({
-        plate_number: Joi.string().required(),
-        facility_id: Joi.number().required(),
+        plate_number: Joi.string()
+            .trim()
+            .required()
+            .custom((value) => normalizePlateNumber(value)),
+        facility_id: Joi.number().integer().positive().required(),
         status: Joi.string().valid('available', 'dispatched', 'maintenance').optional(),
     });
 

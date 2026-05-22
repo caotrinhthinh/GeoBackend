@@ -1,6 +1,4 @@
 const { UserProfile } = require('../models');
-const { ROLE } = require('../constants/roles');
-const AppError = require('../utils/AppError');
 
 function toProfileResponse(profile) {
   if (!profile) return null;
@@ -14,20 +12,15 @@ function toProfileResponse(profile) {
   };
 }
 
+/**
+ * Hồ sơ y tế gắn user_id — dùng khi gửi SOS (mọi vai trò đăng nhập có thể dùng bản đồ /user).
+ */
 async function getMyProfile(user) {
-  if (user.role_id !== ROLE.USER) {
-    throw new AppError('Chỉ tài khoản USER mới có hồ sơ y tế cá nhân', 403);
-  }
-
   const profile = await UserProfile.findOne({ where: { user_id: user.id } });
   return toProfileResponse(profile);
 }
 
 async function upsertMyProfile(user, payload) {
-  if (user.role_id !== ROLE.USER) {
-    throw new AppError('Chỉ tài khoản USER mới có hồ sơ y tế cá nhân', 403);
-  }
-
   const [profile] = await UserProfile.findOrCreate({
     where: { user_id: user.id },
     defaults: { user_id: user.id },

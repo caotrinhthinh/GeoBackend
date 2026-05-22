@@ -22,6 +22,19 @@ const createUser = async (data) => {
     if (!facility) throw new AppError('Không tìm thấy cơ sở y tế này', 404);
   }
 
+  if (role_id === 2 && facility_id) {
+    const conflict = await User.findOne({
+      where: {
+        role_id: 2,
+        facility_id: Number(facility_id),
+        is_active: true,
+      },
+    });
+    if (conflict) {
+      throw new AppError('Bệnh viện này đã có admin hoạt động', 400);
+    }
+  }
+
   const password_hash = await bcrypt.hash(password, 12);
 
   const newUser = await User.create({

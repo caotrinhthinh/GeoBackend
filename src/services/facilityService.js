@@ -18,12 +18,31 @@ const getAllFacilitiesForAdmin = async () => {
     });
 };
 
-const getNearbyFacilities = async (lat, lng, radius_m) => {
+const getNearbyFacilities = async (lat, lng, radius_m, searchQuery) => {
     const { latNum, lngNum } = parseCoordinatePair(lat, lng, 'Cần cung cấp lat và lng.');
-    const radius = parseInt(radius_m) || 5000; // Mặc định 5km
+    const radius = parseInt(radius_m, 10) || 5000;
+    const q = typeof searchQuery === 'string' ? searchQuery.trim() : '';
+
+    if (q.length > 0) {
+        const query = `
+    SELECT
+      id, name, type, address, phone,
+      ST_AsGeoJSON(location_geom::geometry) as location,
+      ST_Distance(location_geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography) AS distance_meters
+    FROM medical_facility
+    WHERE is_active = true
+      AND (name ILIKE :q OR COALESCE(address, '') ILIKE :q)
+    ORDER BY distance_meters ASC
+    LIMIT 80;
+  `;
+        return sequelize.query(query, {
+            replacements: { lng: lngNum, lat: latNum, q: `%${q}%` },
+            type: sequelize.QueryTypes.SELECT,
+        });
+    }
 
     const query = `
-    SELECT 
+    SELECT
       id, name, type, address, phone,
       ST_AsGeoJSON(location_geom::geometry) as location,
       ST_Distance(location_geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography) AS distance_meters
@@ -33,12 +52,10 @@ const getNearbyFacilities = async (lat, lng, radius_m) => {
     ORDER BY distance_meters ASC;
   `;
 
-    const results = await sequelize.query(query, {
+    return sequelize.query(query, {
         replacements: { lng: lngNum, lat: latNum, radius },
         type: sequelize.QueryTypes.SELECT,
     });
-
-    return results;
 };
 
 const createFacility = async (data) => {

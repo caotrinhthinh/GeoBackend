@@ -1,19 +1,32 @@
 # GeoBackend
 
-## Run infrastructure with Docker
+API + Socket.IO cho hệ thống SOS / điều phối xe cứu thương (IE402).
 
-Project now includes `docker-compose.yml` for local PostgreSQL and Redis:
+## Chạy nhanh (dev)
 
-- PostgreSQL: `localhost:5432` (`postgres` / `Phattanphat1`, DB `geodb`)
-- Redis: `localhost:6379`
+```bash
+npm install
+cp .env.example .env
+npm run infra:up
+npm run dev
+```
 
-Use these commands in `GeoBackend`:
+- API: http://localhost:3000  
+- Swagger: http://localhost:3000/api/docs  
 
-- Start infrastructure + run migrations + seeders:
-  - `npm run infra:up`
-- Stop infrastructure:
-  - `npm run infra:down`
+**Hướng dẫn chi tiết:** [HUONG_DAN_CHAY_BACKEND.md](./HUONG_DAN_CHAY_BACKEND.md)  
+**Tài khoản & dữ liệu seed:** [SEED_ACCOUNTS.md](./SEED_ACCOUNTS.md)
 
-If Docker services are already running and you only want to rerun DB setup:
+## Docker (Postgres + Redis)
 
-- `npm run db:init`
+| Dịch vụ | Endpoint | Thông tin |
+|---------|----------|-----------|
+| PostgreSQL | `localhost:5432` | user `postgres`, pass `Phattanphat1`, DB `geodb` |
+| Redis | `localhost:6379` | không mật khẩu (dev) |
+
+| Lệnh | Mô tả |
+|------|--------|
+| `npm run infra:up` | Docker + migrate + seed |
+| `npm run infra:down` | Dừng Docker |
+| `npm run db:init` | Chỉ migrate + seed (Docker đã chạy) |
+

@@ -1,7 +1,8 @@
-const { Ambulance, MedicalFacility } = require('../models');
+const { Ambulance, MedicalFacility, sequelize } = require('../models');
 const { selectGeoJSON, makePoint } = require('../utils/geoHelpers');
 const AppError = require('../utils/AppError');
 const { parseCoordinatePair } = require('../utils/coordinateUtils');
+const { normalizePlateNumber, isValidPlateNumber } = require('../utils/plateNumber');
 
 const buildAmbulanceQuery = (where = {}) => ({
     where,
@@ -18,11 +19,22 @@ const getAmbulancesByFacility = async (facility_id) => {
 };
 
 const createAmbulance = async (data) => {
-    const { plate_number, facility_id, status } = data;
+    const { facility_id, status } = data;
+    const plate_number = normalizePlateNumber(data.plate_number);
 
-    const existingAmbulance = await Ambulance.findOne({ where: { plate_number } });
+    if (!isValidPlateNumber(plate_number)) {
+        throw new AppError('Biển số không hợp lệ (4–20 ký tự, chữ/số và dấu gạch ngang)', 400);
+    }
+
+    const existingAmbulance = await Ambulance.findOne({
+        where: sequelize.where(sequelize.fn('upper', sequelize.col('plate_number')), plate_number),
+    });
     if (existingAmbulance) {
-        throw new AppError('Biển số xe cứu thương đã tồn tại', 400);
+        const atFacility =
+            Number(existingAmbulance.facility_id) === Number(facility_id)
+                ? 'bệnh viện của bạn'
+                : 'bệnh viện khác trong hệ thống';
+        throw new AppError(`Biển số ${plate_number} đã tồn tại (${atFacility})`, 400);
     }
 
     const facility = await MedicalFacility.findByPk(facility_id);
@@ -30,13 +42,19 @@ const createAmbulance = async (data) => {
         throw new AppError('Cơ sở y tế không hợp lệ hoặc không phải bệnh viện', 400);
     }
 
-    // Khởi tạo xe ở trạng thái available và vị trí là của bệnh viện
-    return await Ambulance.create({
-        plate_number,
-        facility_id,
-        status: status || 'available',
-        current_location: facility.location_geom,
-    });
+    try {
+        return await Ambulance.create({
+            plate_number,
+            facility_id,
+            status: status || 'available',
+            current_location: facility.location_geom,
+        });
+    } catch (err) {
+        if (err && err.name === 'SequelizeUniqueConstraintError') {
+            throw new AppError(`Biển số ${plate_number} đã tồn tại trong hệ thống`, 400);
+        }
+        throw err;
+    }
 };
 
 const updateStatus = async (id, status, facility_id, role_id) => {
