@@ -31,6 +31,7 @@ const createSOS = catchAsync(async (req, res, next) => {
     request_id: sos.id,
     lat: value.lat,
     lng: value.lng,
+    facility_id: sos.assigned_facility_id ?? null,
   });
 
   // Build assigned_hospital payload to match frontend contract.
@@ -68,11 +69,46 @@ const createSOS = catchAsync(async (req, res, next) => {
 
   res.status(201).json({
     request_id: sos.id,
+    session_token: sos.session_token ?? undefined,
     assigned_hospital,
     route_path: sos.route_geometry,
     eta_minutes,
     tracking_token,
   });
+});
+
+const getAnonymousSession = catchAsync(async (req, res, next) => {
+  const schema = Joi.object({
+    session_token: Joi.string().uuid({ version: 'uuidv4' }).required(),
+  });
+
+  const { error, value } = schema.validate(req.query);
+  if (error) return next(new AppError(error.details[0].message, 400));
+
+  const preview = await emergencyService.getAnonymousSessionPreview(value.session_token);
+  res.status(200).json({ status: 'success', data: preview });
+});
+
+const linkAnonymousSession = catchAsync(async (req, res, next) => {
+  const schema = Joi.object({
+    session_token: Joi.string().uuid({ version: 'uuidv4' }).required(),
+    request_id: Joi.number().integer().positive().required(),
+  });
+
+  const { error, value } = schema.validate(req.body);
+  if (error) return next(new AppError(error.details[0].message, 400));
+
+  if (!req.user || req.user.role_id !== ROLE.USER) {
+    return next(new AppError('Chỉ tài khoản người dùng mới có thể liên kết SOS', 403));
+  }
+
+  const result = await emergencyService.linkAnonymousSession(
+    req.user.id,
+    value.session_token,
+    value.request_id,
+  );
+
+  res.status(200).json({ status: 'success', data: result });
 });
 
 const getActiveSOS = catchAsync(async (req, res, next) => {
@@ -155,7 +191,6 @@ const getEmergenciesAdmin = catchAsync(async (req, res, next) => {
       case 'assigned':
         return 'ASSIGNED';
       case 'in_progress':
-        // Distinguish "moving" vs "arrived" in admin UI flow.
         return 'ARRIVED';
       case 'completed':
         return 'COMPLETED';
@@ -199,6 +234,7 @@ const getEmergenciesAdmin = catchAsync(async (req, res, next) => {
         tracking_token,
         // Helpful for UI dispatch logic
         assigned_ambulance_id: e.assigned_ambulance_id ?? null,
+        assigned_ambulance_plate: e.ambulance?.plate_number ?? null,
         done_at: e.done_at ?? null,
         requester_name: e.requester_name ?? null,
         requester_age: e.requester_age ?? null,
@@ -269,6 +305,8 @@ const updateStatus = catchAsync(async (req, res, next) => {
 module.exports = {
   createSOS,
   getActiveSOS,
+  getAnonymousSession,
+  linkAnonymousSession,
   getRequests,
   getEmergenciesAdmin,
   assignAmbulance,

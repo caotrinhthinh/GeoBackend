@@ -101,14 +101,33 @@ const closeEmergencyRoom = (requestId) => {
   ioInstance.socketsLeave(roomName);
 };
 
-// TC09: emit alert for Admin dashboard immediately when SOS is created.
+// TC09: notify dispatcher when a new SOS is created (scoped to receiving facility).
 const emitSosAlert = (payload) => {
   if (!ioInstance || typeof ioInstance.to !== 'function') {
     return;
   }
 
-  // AdminTrucBan is role_id=2, and it joins `role:2`
-  ioInstance.to("role:2").emit("sos_alert", payload);
+  const facilityId = payload?.facility_id;
+  if (facilityId != null) {
+    ioInstance.to(`facility:${facilityId}`).emit('sos_alert', payload);
+  }
+
+  // Super admin may monitor all facilities.
+  ioInstance.to('role:1').emit('sos_alert', payload);
+};
+
+// Guest tracker: ambulance dispatched — switch UI from awaiting_dispatch to tracking.
+const emitSosAssigned = (payload) => {
+  if (!ioInstance || typeof ioInstance.to !== 'function') {
+    return;
+  }
+
+  const requestId = payload?.request_id;
+  if (requestId == null) {
+    return;
+  }
+
+  ioInstance.to(`request:${requestId}`).emit('sos_assigned', payload);
 };
 
 module.exports = {
@@ -117,4 +136,5 @@ module.exports = {
   emitTrackingUpdate,
   closeEmergencyRoom,
   emitSosAlert,
+  emitSosAssigned,
 };

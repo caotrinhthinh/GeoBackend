@@ -1,11 +1,15 @@
+const { randomUUID } = require('crypto');
 const { sequelize, EmergencyRequest, MedicalFacility, Ambulance, UserProfile, User } = require('../models');
 const { Op } = require('sequelize');
 const { makePoint, selectGeoJSON } = require('../utils/geoHelpers');
 const AppError = require('../utils/AppError');
 const { parseCoordinatePair } = require('../utils/coordinateUtils');
 const { getRouteLineString, toPointObject } = require('./routeService');
-const { closeEmergencyRoom } = require('../config/socket');
+const { closeEmergencyRoom, emitSosAssigned } = require('../config/socket');
 const { ROLE } = require('../constants/roles');
+
+const SESSION_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const ACTIVE_SOS_STATUSES = ['pending', 'assigned', 'in_progress'];
 
 const SUPPORTED_AREA_BBOX = {
   // Approximate TP.HCM boundary (lat/lng range) for testable supported-area validation.
@@ -41,6 +45,33 @@ async function hasUserProfilesTable() {
     }
 
     return userProfilesTableExistsPromise;
+}
+
+function normalizeSessionToken(sessionToken) {
+    if (typeof sessionToken !== 'string') {
+        return null;
+    }
+
+    const normalized = sessionToken.trim().toLowerCase();
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidPattern.test(normalized)) {
+        return null;
+    }
+
+    return normalized;
+}
+
+function isSessionTokenFresh(emergency) {
+    if (!emergency?.created_at) {
+        return true;
+    }
+
+    const createdAt = new Date(emergency.created_at).getTime();
+    if (!Number.isFinite(createdAt)) {
+        return true;
+    }
+
+    return Date.now() - createdAt <= SESSION_TOKEN_TTL_MS;
 }
 
 function normalizeGuestUuid(guestUuid) {
@@ -180,6 +211,21 @@ const createSOS = async (requester_id, lat, lng, notes, guest_uuid) => {
         });
     }
 
+    const existingColumns = await getEmergencyRequestColumns();
+
+    let sessionToken = null;
+    if (existingColumns.has('session_token')) {
+        const authenticatedRequesterId = requester_id ? Number(requester_id) : null;
+        if (!authenticatedRequesterId) {
+            sessionToken = randomUUID();
+        } else {
+            const requesterUser = await User.findByPk(authenticatedRequesterId, { attributes: ['role_id'] });
+            if (requesterUser?.role_id === ROLE.GUEST) {
+                sessionToken = randomUUID();
+            }
+        }
+    }
+
     const createPayload = {
         requester_id: resolvedRequesterId,
         patient_location: makePoint(latNum, lngNum),
@@ -190,9 +236,8 @@ const createSOS = async (requester_id, lat, lng, notes, guest_uuid) => {
         eta_seconds: route?.duration_seconds != null ? Math.round(route.duration_seconds) : null,
         notes: notes || '',
         ...optionalProfileSnapshot,
+        ...(sessionToken ? { session_token: sessionToken } : {}),
     };
-
-    const existingColumns = await getEmergencyRequestColumns();
     const returningAttributes = [
         'id',
         'requester_id',
@@ -214,7 +259,84 @@ const createSOS = async (requester_id, lat, lng, notes, guest_uuid) => {
         ...(returningAttributes.length > 0 ? { returning: returningAttributes } : {}),
     });
 
+    if (sessionToken) {
+        sos.session_token = sessionToken;
+    }
+
     return sos;
+};
+
+const getAnonymousSessionPreview = async (sessionToken) => {
+    const normalizedToken = normalizeSessionToken(sessionToken);
+    if (!normalizedToken) {
+        return { valid: false, reason: 'invalid_token' };
+    }
+
+    const existingColumns = await getEmergencyRequestColumns();
+    if (!existingColumns.has('session_token')) {
+        return { valid: false, reason: 'not_supported' };
+    }
+
+    const emergency = await EmergencyRequest.findOne({
+        where: { session_token: normalizedToken },
+        attributes: ['id', 'status', 'requester_id', 'created_at', 'session_token'],
+    });
+
+    if (!emergency || !isSessionTokenFresh(emergency)) {
+        return { valid: false, reason: 'expired_or_missing' };
+    }
+
+    let linkable = true;
+    let already_linked = false;
+
+    if (emergency.requester_id) {
+        const requester = await User.findByPk(emergency.requester_id, { attributes: ['id', 'role_id'] });
+        if (requester?.role_id === ROLE.USER) {
+            already_linked = true;
+            linkable = false;
+        }
+    }
+
+    return {
+        valid: true,
+        request_id: emergency.id,
+        status: emergency.status,
+        is_active: ACTIVE_SOS_STATUSES.includes(String(emergency.status)),
+        linkable,
+        already_linked,
+    };
+};
+
+const linkAnonymousSession = async (userId, sessionToken, requestId) => {
+    const preview = await getAnonymousSessionPreview(sessionToken);
+    if (!preview.valid) {
+        throw new AppError('Phiên SOS không hợp lệ hoặc đã hết hạn', 404);
+    }
+
+    if (Number(preview.request_id) !== Number(requestId)) {
+        throw new AppError('request_id không khớp phiên SOS', 400);
+    }
+
+    if (!preview.linkable) {
+        throw new AppError('Ca SOS đã được liên kết tài khoản khác', 409);
+    }
+
+    const normalizedToken = normalizeSessionToken(sessionToken);
+    const [updatedCount] = await EmergencyRequest.update(
+        { requester_id: userId },
+        {
+            where: {
+                id: requestId,
+                session_token: normalizedToken,
+            },
+        },
+    );
+
+    if (!updatedCount) {
+        throw new AppError('Không thể liên kết ca SOS', 500);
+    }
+
+    return { linked: true, request_id: requestId };
 };
 
 const getRequests = async (facility_id, role_id) => {
@@ -252,6 +374,14 @@ const getRequests = async (facility_id, role_id) => {
             ...baseAttributes,
             ...optionalAttributes,
             selectGeoJSON('patient_location', 'location'),
+        ],
+        include: [
+            {
+                model: Ambulance,
+                as: 'ambulance',
+                attributes: ['id', 'plate_number'],
+                required: false,
+            },
         ],
         order: [['created_at', 'DESC']],
     });
@@ -332,6 +462,13 @@ const assignAmbulance = async (emergency_id, ambulance_id, facility_id, role_id)
         await ambulance.save({ transaction: t });
 
         await t.commit();
+
+        emitSosAssigned({
+            request_id: emergency.id,
+            status: 'assigned',
+            assigned_ambulance_id: ambulance_id,
+        });
+
         return emergency;
     } catch (error) {
         await t.rollback();
@@ -389,6 +526,8 @@ module.exports = {
     createSOS,
     getRequests,
     getActiveRequestByIdentity,
+    getAnonymousSessionPreview,
+    linkAnonymousSession,
     assignAmbulance,
     updateStatus,
 };

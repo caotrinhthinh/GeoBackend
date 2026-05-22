@@ -81,8 +81,8 @@ const getAllFacilitiesForAdmin = catchAsync(async (req, res, next) => {
 });
 
 const getNearbyFacilities = catchAsync(async (req, res, next) => {
-  const { lat, lng, radius } = req.query;
-  const results = await facilityService.getNearbyFacilities(lat, lng, radius);
+  const { lat, lng, radius, q } = req.query;
+  const results = await facilityService.getNearbyFacilities(lat, lng, radius, q);
   
   // parse geojson strings
   const data = results.map(f => {

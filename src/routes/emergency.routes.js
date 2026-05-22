@@ -50,6 +50,8 @@ router.post('/sos', optionalJWT, sosLimiter, emergencyController.createSOS);
 // Backward-compatible route (if some clients still call POST /api/emergency)
 router.post('/', optionalJWT, sosLimiter, emergencyController.createSOS);
 router.get('/active', optionalJWT, emergencyController.getActiveSOS);
+router.get('/anonymous-session', emergencyController.getAnonymousSession);
+router.post('/link-anonymous-session', verifyJWT, emergencyController.linkAnonymousSession);
 router.get('/', verifyJWT, checkRole(1, 2), emergencyController.getRequests);
 
 /**

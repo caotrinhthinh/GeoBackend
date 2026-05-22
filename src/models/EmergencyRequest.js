@@ -82,6 +82,10 @@ const EmergencyRequest = sequelize.define('EmergencyRequest', {
     type: DataTypes.STRING(20),
     allowNull: true,
   },
+  session_token: {
+    type: DataTypes.UUID,
+    allowNull: true,
+  },
 }, {
   tableName: 'emergency_request',
   timestamps: true,
