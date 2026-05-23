@@ -161,8 +161,10 @@ const createSOS = async (requester_id, lat, lng, notes, guest_uuid) => {
     // Tìm bệnh viện gần nhất (type = 'hospital')
     const query = `
     SELECT id,
-           ST_Distance(location_geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography) AS distance_meters
-            , ST_AsGeoJSON(location_geom::geometry) AS location
+           name,
+           phone,
+           ST_Distance(location_geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography) AS distance_meters,
+           ST_AsGeoJSON(location_geom::geometry) AS location
     FROM medical_facility
     WHERE is_active = true AND type = 'hospital'
     ORDER BY distance_meters ASC
@@ -262,6 +264,14 @@ const createSOS = async (requester_id, lat, lng, notes, guest_uuid) => {
     if (sessionToken) {
         sos.session_token = sessionToken;
     }
+
+    sos.assigned_facility_snapshot = {
+        id: assignedFacility.id,
+        name: assignedFacility.name,
+        phone: assignedFacility.phone ?? null,
+        lat: hospitalPoint?.lat ?? null,
+        lng: hospitalPoint?.lng ?? null,
+    };
 
     return sos;
 };
@@ -467,6 +477,7 @@ const assignAmbulance = async (emergency_id, ambulance_id, facility_id, role_id)
             request_id: emergency.id,
             status: 'assigned',
             assigned_ambulance_id: ambulance_id,
+            route_path: emergency.route_geometry ?? null,
         });
 
         return emergency;

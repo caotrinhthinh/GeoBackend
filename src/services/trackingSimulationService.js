@@ -1,7 +1,9 @@
 const { sequelize, Ambulance, EmergencyRequest, MedicalFacility } = require('../models');
 const AppError = require('../utils/AppError');
+const { makePoint } = require('../utils/geoHelpers');
 const { getRouteLineString, toPointObject } = require('./routeService');
 const { recordGPS } = require('./trackingService');
+const { closeEmergencyRoom, emitTrackingUpdate } = require('../config/socket');
 
 const activeSimulations = new Map();
 
@@ -49,11 +51,19 @@ const startSimulation = async (ambulanceId, emergencyRequestId, options = {}) =>
     throw new AppError('Không tìm thấy bệnh viện quản lý xe cứu thương', 404);
   }
 
-  const startPoint = toPointObject(ambulanceWithLocation.get('current_location')) || toPointObject(facility.get('location_geom'));
+  const facilityPoint = toPointObject(facility.get('location_geom'));
+  const startPoint = facilityPoint || toPointObject(ambulanceWithLocation.get('current_location'));
   const endPoint = toPointObject(emergencyWithLocation.get('patient_location'));
 
   if (!startPoint || !endPoint) {
     throw new AppError('Thiếu tọa độ để giả lập hành trình', 400);
+  }
+
+  // Always start simulation from hospital to avoid stale ambulance location
+  // from previous runs causing instant completion on a new dispatch.
+  if (facilityPoint && typeof sequelize?.literal === 'function') {
+    ambulance.current_location = makePoint(facilityPoint.lat, facilityPoint.lng);
+    await ambulance.save();
   }
 
   const route = await getRouteLineString(startPoint, endPoint);
@@ -76,6 +86,38 @@ const startSimulation = async (ambulanceId, emergencyRequestId, options = {}) =>
       await recordGPS(ambulanceId, coordinate[1], coordinate[0], emergencyRequestId);
 
       if (stepIndex >= coordinates.length) {
+        // Failsafe: when the route simulation reaches its final point, force
+        // completion if the request is still active.
+        const emergencyAtFinish = await EmergencyRequest.findByPk(emergencyRequestId);
+        if (
+          emergencyAtFinish &&
+          (emergencyAtFinish.status === 'assigned' || emergencyAtFinish.status === 'in_progress')
+        ) {
+          emergencyAtFinish.status = 'completed';
+          emergencyAtFinish.done_at = new Date();
+          await emergencyAtFinish.save();
+        }
+
+        const ambulanceAtFinish = await Ambulance.findByPk(ambulanceId);
+        if (ambulanceAtFinish && ambulanceAtFinish.status !== 'available') {
+          ambulanceAtFinish.status = 'available';
+          await ambulanceAtFinish.save();
+        }
+
+        // Emit a final status update before closing the room so dashboards
+        // can reflect "Hoàn thành" immediately.
+        emitTrackingUpdate({
+          ambulance_id: Number(ambulanceId),
+          emergency_request_id: Number(emergencyRequestId),
+          lat: coordinate[1],
+          lng: coordinate[0],
+          latitude: coordinate[1],
+          longitude: coordinate[0],
+          timestamp: new Date(),
+          status: 'COMPLETED',
+        });
+
+        closeEmergencyRoom(emergencyRequestId);
         clearSimulation(ambulanceId);
       }
     } catch (error) {

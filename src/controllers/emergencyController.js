@@ -36,7 +36,16 @@ const createSOS = catchAsync(async (req, res, next) => {
 
   // Build assigned_hospital payload to match frontend contract.
   let assigned_hospital = null;
-  if (sos?.assigned_facility_id) {
+  const facilitySnapshot = sos?.assigned_facility_snapshot;
+  if (facilitySnapshot?.name) {
+    assigned_hospital = {
+      id: facilitySnapshot.id,
+      name: facilitySnapshot.name,
+      hotline: facilitySnapshot.phone ?? undefined,
+      lat: facilitySnapshot.lat ?? undefined,
+      lng: facilitySnapshot.lng ?? undefined,
+    };
+  } else if (sos?.assigned_facility_id) {
     const facility = await MedicalFacility.findByPk(sos.assigned_facility_id, {
       attributes: ['id', 'name', 'phone', selectGeoJSON('location_geom', 'location')],
     });
@@ -74,6 +83,7 @@ const createSOS = catchAsync(async (req, res, next) => {
     route_path: sos.route_geometry,
     eta_minutes,
     tracking_token,
+    status: sos.status ?? 'pending',
   });
 });
 
@@ -191,7 +201,7 @@ const getEmergenciesAdmin = catchAsync(async (req, res, next) => {
       case 'assigned':
         return 'ASSIGNED';
       case 'in_progress':
-        return 'ARRIVED';
+        return 'ON_THE_WAY';
       case 'completed':
         return 'COMPLETED';
       default:

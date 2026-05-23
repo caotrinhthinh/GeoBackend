@@ -71,6 +71,11 @@ const fetchJson = (url) => new Promise((resolve, reject) => {
   }).on('error', reject);
 });
 
+const OSRM_BASE_URLS = [
+  'https://router.project-osrm.org',
+  'https://routing.openstreetmap.de/routed-car',
+];
+
 const getRouteLineString = async (startPoint, endPoint) => {
   const start = toPointObject(startPoint);
   const end = toPointObject(endPoint);
@@ -79,51 +84,40 @@ const getRouteLineString = async (startPoint, endPoint) => {
     throw new Error('Cần có đủ tọa độ điểm đầu và điểm cuối để tính tuyến đường');
   }
 
-  const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson&steps=false`;
+  for (const baseUrl of OSRM_BASE_URLS) {
+    try {
+      const osrmUrl = `${baseUrl}/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson&steps=false`;
+      const payload = await fetchJson(osrmUrl);
+      const route = payload?.routes?.[0];
+      if (!route?.geometry?.coordinates?.length) {
+        continue;
+      }
 
-  try {
-    const payload = await fetchJson(osrmUrl);
-    const route = payload?.routes?.[0];
-
-    if (!route?.geometry?.coordinates?.length) {
-      throw new Error('OSRM không trả về geometry hợp lệ');
+      return {
+        provider: `osrm:${baseUrl}`,
+        distance_meters: route.distance,
+        duration_seconds: route.duration,
+        lineString: buildLineString(route.geometry.coordinates),
+      };
+    } catch (_error) {
+      // Try next OSRM endpoint.
     }
-
-    return {
-      provider: 'osrm',
-      distance_meters: route.distance,
-      duration_seconds: route.duration,
-      lineString: buildLineString(route.geometry.coordinates),
-    };
-  } catch (error) {
-    const distance_meters = haversineDistanceMeters(start, end);
-    const speed_mps = (30_000 / 3600); // ~30km/h average city speed for ETA fallback
-    const duration_seconds = Math.max(1, Math.round(distance_meters / speed_mps));
-
-    // Build a non-straight LineString for UI/TC expectations when OSRM fails.
-    const dx = end.lng - start.lng;
-    const dy = end.lat - start.lat;
-    const norm = Math.sqrt(dx * dx + dy * dy) || 1;
-    const perpX = -dy / norm;
-    const perpY = dx / norm;
-
-    const steps = 10;
-    const maxWobble = 0.003; // ~300m in lat/lng space (rough)
-    const coords = Array.from({ length: steps + 1 }, (_, i) => {
-      const t = i / steps;
-      const baseLng = start.lng + dx * t;
-      const baseLat = start.lat + dy * t;
-      const wobble = maxWobble * Math.sin(Math.PI * t);
-      return [baseLng + perpX * wobble, baseLat + perpY * wobble];
-    });
-
-    return {
-      provider: 'fallback-straight-line',
-      distance_meters,
-      duration_seconds,
-      lineString: buildLineString(coords),
-    };
   }
+
+  const distance_meters = haversineDistanceMeters(start, end);
+  const speed_mps = (30_000 / 3600); // ~30km/h average city speed for ETA fallback
+  const duration_seconds = Math.max(1, Math.round(distance_meters / speed_mps));
+
+  // Last-resort fallback: keep only endpoints so clients can opt to hide this pseudo-route.
+  return {
+    provider: 'fallback-endpoints',
+    distance_meters,
+    duration_seconds,
+    lineString: buildLineString([
+      [start.lng, start.lat],
+      [end.lng, end.lat],
+    ]),
+  };
 };
 
 module.exports = {

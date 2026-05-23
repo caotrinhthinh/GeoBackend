@@ -1,8 +1,31 @@
-const { AmbulanceTracking, Ambulance, EmergencyRequest } = require('../models');
+const { sequelize, AmbulanceTracking, Ambulance, EmergencyRequest } = require('../models');
 const { makePoint, selectGeoJSON } = require('../utils/geoHelpers');
 const AppError = require('../utils/AppError');
 const { parseCoordinatePair } = require('../utils/coordinateUtils');
-const { emitTrackingUpdate } = require('../config/socket');
+const { emitTrackingUpdate, closeEmergencyRoom } = require('../config/socket');
+const { toPointObject } = require('./routeService');
+
+const AUTO_COMPLETE_RADIUS_METERS = 90;
+
+function haversineDistanceMeters(start, end) {
+    const radiusMeters = 6371000;
+    const toRadians = (degrees) => (degrees * Math.PI) / 180;
+
+    const deltaLat = toRadians(end.lat - start.lat);
+    const deltaLng = toRadians(end.lng - start.lng);
+    const a =
+        Math.sin(deltaLat / 2) ** 2 +
+        Math.cos(toRadians(start.lat)) * Math.cos(toRadians(end.lat)) * Math.sin(deltaLng / 2) ** 2;
+
+    return 2 * radiusMeters * Math.asin(Math.sqrt(a));
+}
+
+function toSocketStatus(status) {
+    if (status === 'completed') return 'COMPLETED';
+    if (status === 'in_progress') return 'ON_THE_WAY';
+    if (status === 'assigned') return 'ASSIGNED';
+    return undefined;
+}
 
 const recordGPS = async (ambulance_id, lat, lng, emergency_request_id, facility_id, role_id) => {
     const { latNum, lngNum } = parseCoordinatePair(lat, lng, 'Cần cung cấp lat và lng');
@@ -26,20 +49,81 @@ const recordGPS = async (ambulance_id, lat, lng, emergency_request_id, facility_
             await ambulance.save();
         }
 
+        let emergencyRouteGeometry = null;
+        let shouldCloseRoom = false;
+        let emittedStatus;
+        let justActivatedTracking = false;
+
         // If this tracking message is tied to an emergency, and that emergency is currently 'assigned', mark it 'in_progress'
         if (emergency_request_id && typeof EmergencyRequest?.findByPk === 'function') {
             const emergency = t
-                ? await EmergencyRequest.findByPk(emergency_request_id, { transaction: t })
-                : await EmergencyRequest.findByPk(emergency_request_id);
+                ? await EmergencyRequest.findByPk(emergency_request_id, {
+                    attributes: [
+                        'id',
+                        'status',
+                        'route_geometry',
+                        [sequelize.fn('ST_AsGeoJSON', sequelize.cast(sequelize.col('patient_location'), 'geometry')), 'patient_location_geojson'],
+                    ],
+                    transaction: t,
+                })
+                : await EmergencyRequest.findByPk(emergency_request_id, {
+                    attributes: [
+                        'id',
+                        'status',
+                        'route_geometry',
+                        [sequelize.fn('ST_AsGeoJSON', sequelize.cast(sequelize.col('patient_location'), 'geometry')), 'patient_location_geojson'],
+                    ],
+                });
+
+            emergencyRouteGeometry = emergency?.route_geometry ?? null;
 
             if (emergency && emergency.status === 'assigned') {
                 emergency.status = 'in_progress';
+                justActivatedTracking = true;
                 if (t) {
                     await emergency.save({ transaction: t });
                 } else {
                     await emergency.save();
                 }
             }
+
+            if (
+                emergency &&
+                !justActivatedTracking &&
+                emergency.status !== 'completed' &&
+                emergency.status !== 'cancelled'
+            ) {
+                const patientPoint = toPointObject(emergency.get('patient_location_geojson'));
+                if (patientPoint) {
+                    const distanceToPatient = haversineDistanceMeters(
+                        { lat: latNum, lng: lngNum },
+                        patientPoint,
+                    );
+
+                    if (distanceToPatient <= AUTO_COMPLETE_RADIUS_METERS) {
+                        emergency.status = 'completed';
+                        emergency.done_at = new Date();
+                        if (t) {
+                            await emergency.save({ transaction: t });
+                        } else {
+                            await emergency.save();
+                        }
+
+                        if (ambulance.status !== 'available') {
+                            ambulance.status = 'available';
+                            if (t) {
+                                await ambulance.save({ transaction: t });
+                            } else {
+                                await ambulance.save();
+                            }
+                        }
+
+                        shouldCloseRoom = true;
+                    }
+                }
+            }
+
+            emittedStatus = toSocketStatus(emergency?.status);
         }
 
         // Create log entry in tracking table
@@ -65,7 +149,13 @@ const recordGPS = async (ambulance_id, lat, lng, emergency_request_id, facility_
                 latitude: latNum,
                 longitude: lngNum,
                 timestamp: trackingRecord.recorded_at,
+                route_path: emergencyRouteGeometry,
+                status: emittedStatus,
             });
+        }
+
+        if (shouldCloseRoom && emergency_request_id) {
+            closeEmergencyRoom(emergency_request_id);
         }
 
         return trackingRecord;

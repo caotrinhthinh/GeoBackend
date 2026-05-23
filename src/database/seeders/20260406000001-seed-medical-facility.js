@@ -18,6 +18,14 @@ async function insertFacility(queryInterface, { name, type, address, phone, lat,
   `);
 }
 
+function normalizeHospitalName(name) {
+  const trimmed = String(name ?? '').trim();
+  if (trimmed.startsWith('BV ')) {
+    return `Bệnh viện ${trimmed.slice(3).trim()}`;
+  }
+  return trimmed;
+}
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface) {
@@ -179,7 +187,7 @@ module.exports = {
 
     for (const h of rawHospitals) {
       await insertFacility(queryInterface, {
-        name: h.name,
+        name: normalizeHospitalName(h.name),
         type: 'hospital',
         address: h.address,
         phone: h.hotline,
