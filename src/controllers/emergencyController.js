@@ -50,7 +50,8 @@ const createSOS = catchAsync(async (req, res, next) => {
       attributes: ['id', 'name', 'phone', selectGeoJSON('location_geom', 'location')],
     });
 
-    const point = facility ? toPointObject(facility.location) : null;
+    const locationValue = facility ? facility.get('location') : null;
+    const point = facility ? toPointObject(locationValue) : null;
 
     assigned_hospital = facility
       ? {
@@ -136,7 +137,8 @@ const getActiveSOS = catchAsync(async (req, res, next) => {
   }
 
   const facility = activeSos.facility;
-  const facilityPoint = facility?.location ? toPointObject(facility.location) : null;
+  const facilityLocation = facility ? facility.get('location') : null;
+  const facilityPoint = facilityLocation ? toPointObject(facilityLocation) : null;
   const ambulancePoint = activeSos.ambulance?.current_location
     ? toPointObject(activeSos.ambulance.current_location)
     : null;
